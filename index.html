@@ -55,6 +55,22 @@
   .voce .ricorrenza { color: var(--muted); font-size: .78rem; }
   .voce .esente { color: var(--muted); font-size: .72rem; margin-top: 2px; }
   .campo .hint { color: var(--muted); font-size: .72rem; margin-top: 4px; }
+  .modale.grafico { max-width: 640px; }
+  .grafico-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 14px; }
+  .grafico-head h2 { margin: 0; }
+  .anno-nav { display: flex; align-items: center; gap: 8px; }
+  .anno-nav span { font-weight: 700; min-width: 52px; text-align: center; }
+  .chart { display: flex; align-items: flex-end; gap: 6px; height: 220px; padding: 4px 0 0; border-bottom: 1px solid rgba(255,255,255,.12); }
+  .chart .col { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: flex-end; height: 100%; gap: 4px; }
+  .chart .val { font-size: .62rem; color: var(--muted); white-space: nowrap; }
+  .chart .bar { width: 100%; min-height: 2px; background: var(--accent); border-radius: 4px 4px 0 0; transition: .2s; }
+  .chart .col.vuoto .bar { background: rgba(255,255,255,.10); }
+  .chart .col.oggi .bar { background: var(--ok); }
+  .chart .mese { display: flex; justify-content: space-between; gap: 6px; margin-top: 6px; }
+  .chart-x { display: flex; gap: 6px; margin-top: 6px; }
+  .chart-x span { flex: 1; text-align: center; font-size: .62rem; color: var(--muted); text-transform: uppercase; }
+  .grafico-riepilogo { margin-top: 14px; color: var(--muted); font-size: .85rem; line-height: 1.5; }
+  .grafico-riepilogo b { color: var(--text); }
   .voce .azioni { display: flex; flex-direction: column; gap: 6px; }
 
   .badge { display: inline-block; padding: 3px 9px; border-radius: 999px; font-size: .74rem;
@@ -98,6 +114,7 @@
 
   <div class="toolbar">
     <button class="primary" id="btn-nuova">➕ Nuova voce</button>
+    <button class="ghost" id="btn-grafico">📊 Grafico</button>
     <button class="ghost" id="btn-impostazioni">⚙️ Impostazioni</button>
     <span class="stato" id="stato">—</span>
   </div>
@@ -141,6 +158,25 @@
     <div class="azioni-modale">
       <button class="primary" id="btn-salva-voce">Salva</button>
       <button class="ghost" data-chiudi="ov-voce">Annulla</button>
+    </div>
+  </div>
+</div>
+
+<!-- Modale grafico -->
+<div class="overlay" id="ov-grafico">
+  <div class="modale grafico">
+    <div class="grafico-head">
+      <h2>📊 Pagamenti per mese</h2>
+      <div class="anno-nav">
+        <button class="small ghost" id="g-prev">◀</button>
+        <span id="g-anno">2026</span>
+        <button class="small ghost" id="g-next">▶</button>
+      </div>
+    </div>
+    <div id="g-chart"></div>
+    <div id="g-riepilogo" class="grafico-riepilogo"></div>
+    <div class="azioni-modale">
+      <button class="ghost" data-chiudi="ov-grafico">Chiudi</button>
     </div>
   </div>
 </div>
@@ -377,6 +413,58 @@ function aggiornaNotaIva() {
   document.getElementById("f-nota-iva").style.display = (f("tipo").value === "mutuo") ? "none" : "block";
 }
 
+// ---------- Grafico pagamenti per mese ----------
+const ABBR_MESI = ["Gen","Feb","Mar","Apr","Mag","Giu","Lug","Ago","Set","Ott","Nov","Dic"];
+let gAnno = oggiData().getFullYear();
+function pagamentiPerMese(anno) {
+  const mesi = new Array(12).fill(0);
+  (dati.voci || []).forEach(v => {
+    const intervallo = RICORRENZE[v.ricorrenza] || 1;
+    const importo = Number(v.importo) || 0;
+    const scadenza = v.scadenza ? parseData(v.scadenza) : null;
+    let d = parseData(v.prima_data);
+    while (d.getFullYear() < anno) d = aggiungiMesi(d, intervallo);
+    while (d.getFullYear() === anno) {
+      if (!scadenza || d <= scadenza) mesi[d.getMonth()] += importo;
+      d = aggiungiMesi(d, intervallo);
+    }
+  });
+  return mesi;
+}
+function apriGrafico() {
+  if (!dati.voci || !dati.voci.length) {
+    alert("Nessuna voce da rappresentare. Aggiungi prima qualche abbonamento o mutuo."); return;
+  }
+  gAnno = oggiData().getFullYear();
+  renderGrafico();
+  apri("ov-grafico");
+}
+function renderGrafico() {
+  const valuta = dati.valuta || "EUR";
+  const mesi = pagamentiPerMese(gAnno);
+  const max = Math.max(...mesi, 0);
+  const oggi = oggiData();
+  const meseCorrente = (gAnno === oggi.getFullYear()) ? oggi.getMonth() : -1;
+  document.getElementById("g-anno").textContent = gAnno;
+  const bars = mesi.map((tot, i) => {
+    const h = max > 0 ? Math.round((tot / max) * 100) : 0;
+    const cls = tot === 0 ? "vuoto" : (i === meseCorrente ? "oggi" : "");
+    const val = tot > 0 ? "€" + Math.round(tot) : "";
+    return `<div class="col ${cls}" title="${ABBR_MESI[i]} ${gAnno}: ${fmt(tot, valuta)}"><div class="val">${val}</div><div class="bar" style="height:${h}%"></div></div>`;
+  }).join("");
+  const labels = ABBR_MESI.map(m => `<span>${m}</span>`).join("");
+  document.getElementById("g-chart").innerHTML = `<div class="chart">${bars}</div><div class="chart-x">${labels}</div>`;
+  const totAnno = mesi.reduce((a, b) => a + b, 0);
+  const rie = document.getElementById("g-riepilogo");
+  if (totAnno === 0) {
+    rie.innerHTML = "Nessun pagamento previsto in questo anno.";
+  } else {
+    const picco = mesi.indexOf(max);
+    rie.innerHTML = `Totale anno: <b>${fmt(totAnno, valuta)}</b> · Media: <b>${fmt(totAnno / 12, valuta)}</b>/mese<br>` +
+      `Mese di picco: <b>${MESI[picco + 1]}</b> (${fmt(max, valuta)})`;
+  }
+}
+
 async function salvaVoce() {
   const voce = {
     nome: f("nome").value.trim(), tipo: f("tipo").value,
@@ -424,6 +512,9 @@ function salvaCfgUI() {
 // ---------- Eventi ----------
 document.getElementById("btn-nuova").onclick = () => apriVoce(null);
 document.getElementById("btn-impostazioni").onclick = apriCfg;
+document.getElementById("btn-grafico").onclick = apriGrafico;
+document.getElementById("g-prev").onclick = () => { gAnno--; renderGrafico(); };
+document.getElementById("g-next").onclick = () => { gAnno++; renderGrafico(); };
 document.getElementById("btn-salva-voce").onclick = salvaVoce;
 document.getElementById("f-tipo").onchange = aggiornaNotaIva;
 document.getElementById("btn-salva-cfg").onclick = salvaCfgUI;
