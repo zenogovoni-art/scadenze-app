@@ -1,0 +1,428 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Abbonamenti & Mutui — scadenze</title>
+<style>
+  :root {
+    --bg: #0f1226; --card: #1a1f3a; --card2: #222949; --text: #e8ecff;
+    --muted: #9aa3c7; --accent: #6ea8fe; --ok: #4ade80; --warn: #fbbf24;
+    --alert: #f87171; --line: #2c335c;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    background: radial-gradient(1200px 600px at 70% -10%, #1c2350 0%, var(--bg) 60%);
+    color: var(--text); min-height: 100vh; padding: 24px 16px 60px;
+  }
+  .wrap { max-width: 880px; margin: 0 auto; }
+  header h1 { font-size: 1.5rem; margin: 0 0 4px; }
+  header p { color: var(--muted); margin: 0 0 18px; font-size: .9rem; }
+
+  .toolbar { display: flex; gap: 10px; align-items: center; margin-bottom: 18px; flex-wrap: wrap; }
+  .toolbar .stato { font-size: .8rem; color: var(--muted); margin-left: auto; }
+  .toolbar .stato.ok { color: var(--ok); }
+  .toolbar .stato.ko { color: var(--alert); }
+
+  button {
+    font: inherit; cursor: pointer; border: 1px solid var(--line); border-radius: 10px;
+    background: var(--card2); color: var(--text); padding: 9px 14px; transition: .15s;
+  }
+  button:hover { border-color: var(--accent); }
+  button.primary { background: var(--accent); color: #0b1020; border-color: var(--accent); font-weight: 600; }
+  button.ghost { background: transparent; }
+  button.small { padding: 5px 9px; font-size: .82rem; }
+  button.danger:hover { border-color: var(--alert); color: var(--alert); }
+
+  .totali { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 22px; }
+  .totale { background: linear-gradient(135deg, var(--card2), var(--card));
+    border: 1px solid var(--line); border-radius: 16px; padding: 16px 18px; }
+  .totale .label { color: var(--muted); font-size: .8rem; text-transform: uppercase; letter-spacing: .04em; }
+  .totale .val { font-size: 1.7rem; font-weight: 700; margin-top: 4px; }
+
+  .sezione-titolo { font-size: .85rem; color: var(--muted); text-transform: uppercase;
+    letter-spacing: .05em; margin: 22px 4px 10px; }
+
+  .voce { background: var(--card); border: 1px solid var(--line); border-radius: 14px;
+    padding: 14px 16px; margin-bottom: 10px; display: flex; align-items: center; gap: 14px; }
+  .voce .icona { font-size: 1.6rem; width: 34px; text-align: center; }
+  .voce .main { flex: 1; min-width: 0; }
+  .voce .nome { font-weight: 600; font-size: 1.05rem; }
+  .voce .meta { color: var(--muted); font-size: .82rem; margin-top: 3px; }
+  .voce .destra { text-align: right; white-space: nowrap; }
+  .voce .importo { font-weight: 700; font-size: 1.05rem; }
+  .voce .ricorrenza { color: var(--muted); font-size: .78rem; }
+  .voce .azioni { display: flex; flex-direction: column; gap: 6px; }
+
+  .badge { display: inline-block; padding: 3px 9px; border-radius: 999px; font-size: .74rem;
+    font-weight: 600; margin-top: 6px; }
+  .badge.ok { background: rgba(74,222,128,.15); color: var(--ok); }
+  .badge.warn { background: rgba(251,191,36,.15); color: var(--warn); }
+  .badge.alert { background: rgba(248,113,113,.18); color: var(--alert); }
+  .badge.fine { background: rgba(248,113,113,.25); color: #fff; }
+
+  .vuoto, .errore { background: var(--card); border: 1px solid var(--line); border-radius: 14px;
+    padding: 24px; color: var(--muted); text-align: center; }
+  .errore { color: var(--alert); }
+  footer { color: var(--muted); font-size: .78rem; text-align: center; margin-top: 30px; }
+  a { color: var(--accent); }
+
+  /* Modale */
+  .overlay { position: fixed; inset: 0; background: rgba(6,8,20,.7); display: none;
+    align-items: center; justify-content: center; padding: 16px; z-index: 10; }
+  .overlay.aperto { display: flex; }
+  .modale { background: var(--card); border: 1px solid var(--line); border-radius: 18px;
+    padding: 22px; width: 100%; max-width: 460px; max-height: 90vh; overflow: auto; }
+  .modale h2 { margin: 0 0 16px; font-size: 1.2rem; }
+  .campo { margin-bottom: 13px; }
+  .campo label { display: block; font-size: .82rem; color: var(--muted); margin-bottom: 5px; }
+  .campo input, .campo select {
+    width: 100%; font: inherit; padding: 9px 11px; border-radius: 10px;
+    border: 1px solid var(--line); background: var(--bg); color: var(--text); }
+  .campo .hint { font-size: .74rem; color: var(--muted); margin-top: 4px; }
+  .due { display: grid; grid-template-columns: 1fr 1fr; gap: 11px; }
+  .azioni-modale { display: flex; gap: 10px; margin-top: 18px; }
+  .azioni-modale .primary { flex: 1; }
+  @media (max-width: 520px) { .totali { grid-template-columns: 1fr; } }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1>💳 Abbonamenti &amp; Mutui</h1>
+    <p>Aggiungi, modifica ed elimina le voci: si salvano su GitHub e gli avvisi arrivano su Telegram.</p>
+  </header>
+
+  <div class="toolbar">
+    <button class="primary" id="btn-nuova">➕ Nuova voce</button>
+    <button class="ghost" id="btn-impostazioni">⚙️ Impostazioni</button>
+    <span class="stato" id="stato">—</span>
+  </div>
+
+  <div class="totali">
+    <div class="totale"><div class="label">Spesa mensile</div><div class="val" id="tot-mese">—</div></div>
+    <div class="totale"><div class="label">Spesa annuale</div><div class="val" id="tot-anno">—</div></div>
+  </div>
+
+  <div id="contenuto"></div>
+
+  <footer>I dati vivono in <code>dati.json</code> nel tuo repo: webapp e avvisi Telegram leggono lo stesso file.</footer>
+</div>
+
+<!-- Modale voce -->
+<div class="overlay" id="ov-voce">
+  <div class="modale">
+    <h2 id="titolo-voce">Nuova voce</h2>
+    <div class="campo"><label>Nome</label><input id="f-nome" placeholder="Es. Netflix"></div>
+    <div class="due">
+      <div class="campo"><label>Tipo</label>
+        <select id="f-tipo"><option value="abbonamento">Abbonamento</option><option value="mutuo">Mutuo</option></select>
+      </div>
+      <div class="campo"><label>Importo (per addebito)</label><input id="f-importo" type="number" step="0.01" placeholder="17.99"></div>
+    </div>
+    <div class="due">
+      <div class="campo"><label>Ricorrenza</label>
+        <select id="f-ricorrenza">
+          <option value="mensile">Mensile</option><option value="bimestrale">Bimestrale</option>
+          <option value="trimestrale">Trimestrale</option><option value="quadrimestrale">Quadrimestrale</option>
+          <option value="semestrale">Semestrale</option><option value="annuale">Annuale</option>
+        </select>
+      </div>
+      <div class="campo"><label>Avviso (giorni prima)</label><input id="f-avviso" type="number" min="0" value="3"></div>
+    </div>
+    <div class="due">
+      <div class="campo"><label>Prima data di addebito</label><input id="f-prima" type="date"></div>
+      <div class="campo"><label>Scadenza (vuoto = non scade)</label><input id="f-scadenza" type="date"></div>
+    </div>
+    <div class="campo"><label>Note</label><input id="f-note" placeholder="facoltative"></div>
+    <div class="azioni-modale">
+      <button class="primary" id="btn-salva-voce">Salva</button>
+      <button class="ghost" data-chiudi="ov-voce">Annulla</button>
+    </div>
+  </div>
+</div>
+
+<!-- Modale impostazioni -->
+<div class="overlay" id="ov-cfg">
+  <div class="modale">
+    <h2>⚙️ Impostazioni</h2>
+    <div class="due">
+      <div class="campo"><label>Utente/Org GitHub</label><input id="c-owner" placeholder="zenogovoni-art"></div>
+      <div class="campo"><label>Repository</label><input id="c-repo" placeholder="scadenze"></div>
+    </div>
+    <div class="due">
+      <div class="campo"><label>Branch</label><input id="c-branch" value="main"></div>
+      <div class="campo"><label>Valuta</label>
+        <select id="c-valuta"><option>EUR</option><option>USD</option><option>GBP</option></select>
+      </div>
+    </div>
+    <div class="campo"><label>Token GitHub (fine-grained, Contents: read & write)</label>
+      <input id="c-token" type="password" placeholder="github_pat_...">
+      <div class="hint">Resta solo in questo browser (localStorage), non viene mai salvato nel repo.
+        Vedi <b>ATTIVAZIONE.md</b> per crearlo.</div>
+    </div>
+    <div class="azioni-modale">
+      <button class="primary" id="btn-salva-cfg">Salva e ricarica</button>
+      <button class="ghost" data-chiudi="ov-cfg">Chiudi</button>
+    </div>
+  </div>
+</div>
+
+<script>
+const RICORRENZE = { mensile:1, bimestrale:2, trimestrale:3, quadrimestrale:4, semestrale:6, annuale:12 };
+const MESI = ["","gennaio","febbraio","marzo","aprile","maggio","giugno","luglio","agosto","settembre","ottobre","novembre","dicembre"];
+const ALERT_SCADENZA_GIORNI = 30;
+const PATH = "dati.json";
+
+let cfg = caricaCfg();
+let dati = { valuta: "EUR", voci: [] };
+let sha = null;            // sha del file su GitHub (serve per salvare)
+let editIndex = null;      // indice voce in modifica, null = nuova
+
+// ---------- Config (localStorage) ----------
+function caricaCfg() {
+  const salvata = JSON.parse(localStorage.getItem("scadenze_cfg") || "{}");
+  // Auto-rileva owner/repo dall'URL di GitHub Pages (utente.github.io/repo/).
+  if (!salvata.owner && location.hostname.endsWith("github.io")) {
+    salvata.owner = location.hostname.split(".")[0];
+    salvata.repo = location.pathname.split("/").filter(Boolean)[0] || salvata.repo;
+  }
+  return { branch: "main", ...salvata };
+}
+function salvaCfg() { localStorage.setItem("scadenze_cfg", JSON.stringify(cfg)); }
+
+// ---------- Date e formattazione ----------
+function oggiData() { const d = new Date(); d.setHours(0,0,0,0); return d; }
+function parseData(s) { const [a,m,g] = s.split("-").map(Number); return new Date(a, m-1, g); }
+function isoData(d) { return d.toISOString().slice(0,10); }
+function dataEstesa(d) { return `${d.getDate()} ${MESI[d.getMonth()+1]} ${d.getFullYear()}`; }
+function giorniTra(a, b) { return Math.round((a - b) / 86400000); }
+function aggiungiMesi(d, mesi) {
+  const r = new Date(d.getFullYear(), d.getMonth() + mesi, 1);
+  const ultimo = new Date(r.getFullYear(), r.getMonth()+1, 0).getDate();
+  r.setDate(Math.min(d.getDate(), ultimo)); return r;
+}
+function prossimoPagamento(prima, intervallo, oggi) {
+  let d = new Date(prima); while (d < oggi) d = aggiungiMesi(d, intervallo); return d;
+}
+function fmt(v, valuta) {
+  return new Intl.NumberFormat("it-IT", { style:"currency", currency: valuta || "EUR" }).format(v);
+}
+
+// ---------- GitHub API ----------
+function apiUrl() {
+  return `https://api.github.com/repos/${cfg.owner}/${cfg.repo}/contents/${PATH}`;
+}
+function b64decode(b64) { return decodeURIComponent(escape(atob(b64.replace(/\s/g,"")))); }
+function b64encode(str) { return btoa(unescape(encodeURIComponent(str))); }
+
+async function caricaDati() {
+  if (!cfg.owner || !cfg.repo) {
+    setStato("Apri ⚙️ Impostazioni per collegare il repo.", "ko");
+    mostraVuoto("Configura repo e token in ⚙️ Impostazioni per iniziare.");
+    return;
+  }
+  setStato("Carico…");
+  const headers = { "Accept": "application/vnd.github+json" };
+  if (cfg.token) headers["Authorization"] = `Bearer ${cfg.token}`;
+  try {
+    const r = await fetch(`${apiUrl()}?ref=${cfg.branch}&t=${Date.now()}`, { headers });
+    if (r.status === 404) {           // file ancora inesistente: parto vuoto
+      sha = null; dati = { valuta: cfg.valuta || "EUR", voci: [] };
+      setStato("Repo collegato (dati.json verrà creato al primo salvataggio).", "ok");
+      render(); return;
+    }
+    if (!r.ok) throw new Error(`${r.status} ${r.statusText}`);
+    const j = await r.json();
+    sha = j.sha;
+    dati = JSON.parse(b64decode(j.content));
+    if (cfg.valuta) dati.valuta = cfg.valuta;
+    setStato(`Collegato a ${cfg.owner}/${cfg.repo}`, "ok");
+    render();
+  } catch (e) {
+    setStato("Errore di lettura: " + e.message, "ko");
+    mostraVuoto("Impossibile leggere il repo. Controlla owner/repo/token in ⚙️ Impostazioni." +
+      (cfg.token ? "" : " Se il repo è privato serve il token."));
+  }
+}
+
+async function salvaSuGitHub() {
+  if (!cfg.token) { apri("ov-cfg"); alert("Inserisci il token GitHub nelle Impostazioni per salvare."); return false; }
+  setStato("Salvo su GitHub…");
+  const corpo = { _nota: "Gestito dalla webapp. Unica fonte dati per webapp e avvisi Telegram.",
+                  valuta: dati.valuta || "EUR", voci: dati.voci };
+  const body = {
+    message: "Aggiorna abbonamenti/mutui dalla webapp",
+    content: b64encode(JSON.stringify(corpo, null, 2) + "\n"),
+    branch: cfg.branch,
+  };
+  if (sha) body.sha = sha;
+  try {
+    const r = await fetch(apiUrl(), {
+      method: "PUT",
+      headers: { "Authorization": `Bearer ${cfg.token}`, "Accept": "application/vnd.github+json" },
+      body: JSON.stringify(body),
+    });
+    if (!r.ok) {
+      const t = await r.text();
+      throw new Error(r.status === 409 ? "conflitto: ricarica la pagina e riprova" : `${r.status} ${t.slice(0,120)}`);
+    }
+    const j = await r.json();
+    sha = j.content.sha;
+    setStato("Salvato ✓", "ok");
+    return true;
+  } catch (e) {
+    setStato("Errore nel salvataggio: " + e.message, "ko");
+    alert("Non sono riuscito a salvare: " + e.message);
+    return false;
+  }
+}
+
+// ---------- Render ----------
+function setStato(testo, cls) { const e = document.getElementById("stato"); e.textContent = testo; e.className = "stato " + (cls||""); }
+function mostraVuoto(t) { document.getElementById("contenuto").innerHTML = `<div class="vuoto">${t}</div>`;
+  document.getElementById("tot-mese").textContent = "—"; document.getElementById("tot-anno").textContent = "—"; }
+
+function render() {
+  const valuta = dati.valuta || "EUR";
+  const oggi = oggiData();
+  const voci = (dati.voci || []).map((v, i) => {
+    const intervallo = RICORRENZE[v.ricorrenza] || 1;
+    const scadenza = v.scadenza ? parseData(v.scadenza) : null;
+    const terminata = scadenza && scadenza < oggi;
+    const prossima = prossimoPagamento(parseData(v.prima_data), intervallo, oggi);
+    return { ...v, _i: i, intervallo, scadenza, terminata, prossima,
+      giorniPag: giorniTra(prossima, oggi),
+      giorniFine: scadenza ? giorniTra(scadenza, oggi) : null,
+      mensileEq: Number(v.importo) / intervallo };
+  });
+
+  const attive = voci.filter(v => !v.terminata);
+  const totMese = attive.reduce((s,v) => s + v.mensileEq, 0);
+  document.getElementById("tot-mese").textContent = fmt(totMese, valuta);
+  document.getElementById("tot-anno").textContent = fmt(totMese * 12, valuta);
+
+  attive.sort((a,b) => a.prossima - b.prossima);
+  const terminate = voci.filter(v => v.terminata);
+  const cont = document.getElementById("contenuto");
+  if (!voci.length) { mostraVuoto("Nessuna voce. Premi ➕ Nuova voce per iniziare."); return; }
+
+  let html = `<div class="sezione-titolo">Attivi (${attive.length})</div>`;
+  html += attive.map(voceHTML(valuta)).join("") || `<div class="vuoto">Nessuna voce attiva.</div>`;
+  if (terminate.length) {
+    html += `<div class="sezione-titolo">Terminati (${terminate.length})</div>`;
+    html += terminate.map(voceHTML(valuta)).join("");
+  }
+  cont.innerHTML = html;
+  cont.querySelectorAll("[data-edit]").forEach(b => b.onclick = () => apriVoce(+b.dataset.edit));
+  cont.querySelectorAll("[data-del]").forEach(b => b.onclick = () => eliminaVoce(+b.dataset.del));
+}
+
+function badgePagamento(g, avviso) {
+  if (g === 0) return `<span class="badge alert">Addebito oggi</span>`;
+  if (g === 1) return `<span class="badge warn">Addebito domani</span>`;
+  if (g <= (avviso ?? 3)) return `<span class="badge warn">Tra ${g} giorni</span>`;
+  return `<span class="badge ok">Tra ${g} giorni</span>`;
+}
+function voceHTML(valuta) {
+  return (v) => {
+    const icona = v.tipo === "mutuo" ? "🏦" : "🔔";
+    let bScad = "";
+    if (v.terminata) bScad = `<span class="badge fine">Terminato il ${dataEstesa(v.scadenza)}</span>`;
+    else if (v.giorniFine !== null && v.giorniFine <= ALERT_SCADENZA_GIORNI) bScad = `<span class="badge alert">⚠️ Termina tra ${v.giorniFine} giorni</span>`;
+    else if (v.scadenza) bScad = `<span class="badge ok">Fino al ${dataEstesa(v.scadenza)}</span>`;
+    const bPag = v.terminata ? "" : badgePagamento(v.giorniPag, v.avviso_giorni);
+    const note = v.note ? ` · ${v.note}` : "";
+    return `<div class="voce">
+        <div class="icona">${icona}</div>
+        <div class="main">
+          <div class="nome">${esc(v.nome)}</div>
+          <div class="meta">${v.terminata ? "Concluso" : "Prossimo addebito: " + dataEstesa(v.prossima)}${esc(note)}</div>
+          <div>${bPag} ${bScad}</div>
+        </div>
+        <div class="destra">
+          <div class="importo">${fmt(Number(v.importo), valuta)}</div>
+          <div class="ricorrenza">${v.ricorrenza}</div>
+        </div>
+        <div class="azioni">
+          <button class="small ghost" data-edit="${v._i}">✏️</button>
+          <button class="small ghost danger" data-del="${v._i}">🗑️</button>
+        </div>
+      </div>`;
+  };
+}
+function esc(s) { return String(s).replace(/[&<>"]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c])); }
+
+// ---------- Modali ----------
+function apri(id) { document.getElementById(id).classList.add("aperto"); }
+function chiudi(id) { document.getElementById(id).classList.remove("aperto"); }
+
+function apriVoce(i) {
+  editIndex = (i ?? null);
+  const v = (i != null) ? dati.voci[i] : { tipo:"abbonamento", ricorrenza:"mensile", avviso_giorni:3, prima_data: isoData(oggiData()) };
+  document.getElementById("titolo-voce").textContent = (i != null) ? "Modifica voce" : "Nuova voce";
+  f("nome").value = v.nome || ""; f("tipo").value = v.tipo || "abbonamento";
+  f("importo").value = v.importo ?? ""; f("ricorrenza").value = v.ricorrenza || "mensile";
+  f("avviso").value = v.avviso_giorni ?? 3; f("prima").value = v.prima_data || "";
+  f("scadenza").value = v.scadenza || ""; f("note").value = v.note || "";
+  apri("ov-voce");
+}
+function f(id) { return document.getElementById("f-" + id); }
+
+async function salvaVoce() {
+  const voce = {
+    nome: f("nome").value.trim(), tipo: f("tipo").value,
+    importo: parseFloat(f("importo").value), ricorrenza: f("ricorrenza").value,
+    prima_data: f("prima").value, scadenza: f("scadenza").value || null,
+    avviso_giorni: parseInt(f("avviso").value || "3", 10), note: f("note").value.trim(),
+  };
+  if (!voce.nome || isNaN(voce.importo) || !voce.prima_data) {
+    alert("Compila almeno nome, importo e prima data di addebito."); return;
+  }
+  const backup = JSON.stringify(dati.voci);
+  if (editIndex != null) dati.voci[editIndex] = voce; else dati.voci.push(voce);
+  render();
+  const ok = await salvaSuGitHub();
+  if (ok) chiudi("ov-voce");
+  else { dati.voci = JSON.parse(backup); render(); }   // ripristina se il salvataggio fallisce
+}
+
+async function eliminaVoce(i) {
+  if (!confirm(`Eliminare "${dati.voci[i].nome}"?`)) return;
+  const backup = JSON.stringify(dati.voci);
+  const rimossa = dati.voci.splice(i, 1);
+  render();
+  const ok = await salvaSuGitHub();
+  if (!ok) { dati.voci = JSON.parse(backup); render(); }
+}
+
+function apriCfg() {
+  document.getElementById("c-owner").value = cfg.owner || "";
+  document.getElementById("c-repo").value = cfg.repo || "";
+  document.getElementById("c-branch").value = cfg.branch || "main";
+  document.getElementById("c-valuta").value = cfg.valuta || dati.valuta || "EUR";
+  document.getElementById("c-token").value = cfg.token || "";
+  apri("ov-cfg");
+}
+function salvaCfgUI() {
+  cfg.owner = document.getElementById("c-owner").value.trim();
+  cfg.repo = document.getElementById("c-repo").value.trim();
+  cfg.branch = document.getElementById("c-branch").value.trim() || "main";
+  cfg.valuta = document.getElementById("c-valuta").value;
+  cfg.token = document.getElementById("c-token").value.trim();
+  salvaCfg(); chiudi("ov-cfg"); caricaDati();
+}
+
+// ---------- Eventi ----------
+document.getElementById("btn-nuova").onclick = () => apriVoce(null);
+document.getElementById("btn-impostazioni").onclick = apriCfg;
+document.getElementById("btn-salva-voce").onclick = salvaVoce;
+document.getElementById("btn-salva-cfg").onclick = salvaCfgUI;
+document.querySelectorAll("[data-chiudi]").forEach(b => b.onclick = () => chiudi(b.dataset.chiudi));
+document.querySelectorAll(".overlay").forEach(o => o.onclick = e => { if (e.target === o) chiudi(o.id); });
+
+caricaDati();
+</script>
+</body>
+</html>
