@@ -71,6 +71,10 @@
   .chart-x { display: flex; gap: 6px; margin-top: 6px; }
   .chart-x span { flex: 1; text-align: center; font-size: .62rem; color: var(--muted); text-transform: uppercase; }
   .chart-x span.ora { color: var(--accent); font-weight: 700; }
+  .g-filtri { display: flex; gap: 8px; margin-bottom: 12px; flex-wrap: wrap; }
+  .chip { background: var(--card2); color: var(--muted); border: 1px solid rgba(255,255,255,.14);
+    border-radius: 999px; padding: 5px 13px; font-size: .8rem; cursor: pointer; }
+  .chip.attivo { background: var(--accent); color: #0b1020; border-color: var(--accent); font-weight: 600; }
   .legenda { display: flex; gap: 18px; margin-top: 12px; font-size: .8rem; color: var(--muted); }
   .legenda .box { display: inline-block; width: 12px; height: 12px; border-radius: 3px; margin-right: 6px; vertical-align: -1px; }
   .legenda .box.abb { background: var(--accent); }
@@ -181,6 +185,11 @@
         <span id="g-anno">2026</span>
         <button class="small ghost" id="g-next">▶</button>
       </div>
+    </div>
+    <div class="g-filtri">
+      <button class="chip attivo" data-f="tutti">Tutti</button>
+      <button class="chip" data-f="abb">Abbonamenti</button>
+      <button class="chip" data-f="mut">Mutui</button>
     </div>
     <div id="g-chart"></div>
     <div class="legenda">
@@ -429,6 +438,7 @@ function aggiornaNotaIva() {
 // ---------- Grafico pagamenti per mese ----------
 const ABBR_MESI = ["Gen","Feb","Mar","Apr","Mag","Giu","Lug","Ago","Set","Ott","Nov","Dic"];
 let gAnno = oggiData().getFullYear();
+let gFiltro = "tutti";
 function pagamentiPerMese(anno) {
   const mesi = Array.from({ length: 12 }, () => ({ abb: 0, mut: 0, tot: 0 }));
   (dati.voci || []).forEach(v => {
@@ -450,22 +460,28 @@ function apriGrafico() {
     alert("Nessuna voce da rappresentare. Aggiungi prima qualche abbonamento o mutuo."); return;
   }
   gAnno = oggiData().getFullYear();
+  gFiltro = "tutti";
+  document.querySelectorAll(".g-filtri .chip").forEach(c => c.classList.toggle("attivo", c.dataset.f === "tutti"));
   renderGrafico();
   apri("ov-grafico");
 }
 function renderGrafico() {
   const valuta = dati.valuta || "EUR";
+  const mostraAbb = gFiltro !== "mut";
+  const mostraMut = gFiltro !== "abb";
   const mesi = pagamentiPerMese(gAnno);
-  const max = Math.max(...mesi.map(m => m.tot), 0);
+  const vis = m => (mostraAbb ? m.abb : 0) + (mostraMut ? m.mut : 0);
+  const max = Math.max(...mesi.map(vis), 0);
   const oggi = oggiData();
   const meseCorrente = (gAnno === oggi.getFullYear()) ? oggi.getMonth() : -1;
   document.getElementById("g-anno").textContent = gAnno;
   const bars = mesi.map((m, i) => {
-    const h = max > 0 ? Math.round((m.tot / max) * 100) : 0;
-    const cls = m.tot === 0 ? "vuoto" : (i === meseCorrente ? "oggi" : "");
-    const val = m.tot > 0 ? "€" + Math.round(m.tot) : "";
-    const hAbb = m.tot > 0 ? (m.abb / m.tot) * 100 : 0;
-    const hMut = m.tot > 0 ? (m.mut / m.tot) * 100 : 0;
+    const tot = vis(m);
+    const h = max > 0 ? Math.round((tot / max) * 100) : 0;
+    const cls = tot === 0 ? "vuoto" : (i === meseCorrente ? "oggi" : "");
+    const val = tot > 0 ? "€" + Math.round(tot) : "";
+    const hAbb = tot > 0 && mostraAbb ? (m.abb / tot) * 100 : 0;
+    const hMut = tot > 0 && mostraMut ? (m.mut / tot) * 100 : 0;
     const titolo = `${ABBR_MESI[i]} ${gAnno} — Abbonamenti ${fmt(m.abb, valuta)} · Mutui ${fmt(m.mut, valuta)} · Totale ${fmt(m.tot, valuta)}`;
     return `<div class="col ${cls}" title="${titolo}"><div class="val">${val}</div>` +
       `<div class="bar" style="height:${h}%"><div class="seg abb" style="height:${hAbb}%"></div><div class="seg mut" style="height:${hMut}%"></div></div></div>`;
@@ -474,15 +490,18 @@ function renderGrafico() {
   document.getElementById("g-chart").innerHTML = `<div class="chart">${bars}</div><div class="chart-x">${labels}</div>`;
   const totAbb = mesi.reduce((a, m) => a + m.abb, 0);
   const totMut = mesi.reduce((a, m) => a + m.mut, 0);
-  const totAnno = totAbb + totMut;
+  const totVis = mesi.reduce((a, m) => a + vis(m), 0);
   const rie = document.getElementById("g-riepilogo");
-  if (totAnno === 0) {
+  if (totVis === 0) {
     rie.innerHTML = "Nessun pagamento previsto in questo anno.";
   } else {
-    const picco = mesi.reduce((best, m, i) => m.tot > mesi[best].tot ? i : best, 0);
-    rie.innerHTML = `Totale anno: <b>${fmt(totAnno, valuta)}</b> · Media: <b>${fmt(totAnno / 12, valuta)}</b>/mese<br>` +
-      `<span class="punto abb"></span>Abbonamenti: <b>${fmt(totAbb, valuta)}</b> · <span class="punto mut"></span>Mutui: <b>${fmt(totMut, valuta)}</b><br>` +
-      `Mese di picco: <b>${MESI[picco + 1]}</b> (${fmt(mesi[picco].tot, valuta)})`;
+    const picco = mesi.reduce((best, m, i) => vis(m) > vis(mesi[best]) ? i : best, 0);
+    let righe = `Totale anno: <b>${fmt(totVis, valuta)}</b> · Media: <b>${fmt(totVis / 12, valuta)}</b>/mese<br>`;
+    if (gFiltro === "tutti") {
+      righe += `<span class="punto abb"></span>Abbonamenti: <b>${fmt(totAbb, valuta)}</b> · <span class="punto mut"></span>Mutui: <b>${fmt(totMut, valuta)}</b><br>`;
+    }
+    righe += `Mese di picco: <b>${MESI[picco + 1]}</b> (${fmt(vis(mesi[picco]), valuta)})`;
+    rie.innerHTML = righe;
   }
 }
 
@@ -536,6 +555,11 @@ document.getElementById("btn-impostazioni").onclick = apriCfg;
 document.getElementById("btn-grafico").onclick = apriGrafico;
 document.getElementById("g-prev").onclick = () => { gAnno--; renderGrafico(); };
 document.getElementById("g-next").onclick = () => { gAnno++; renderGrafico(); };
+document.querySelectorAll(".g-filtri .chip").forEach(c => c.onclick = () => {
+  gFiltro = c.dataset.f;
+  document.querySelectorAll(".g-filtri .chip").forEach(x => x.classList.toggle("attivo", x === c));
+  renderGrafico();
+});
 document.getElementById("btn-salva-voce").onclick = salvaVoce;
 document.getElementById("f-tipo").onchange = aggiornaNotaIva;
 document.getElementById("btn-salva-cfg").onclick = salvaCfgUI;
