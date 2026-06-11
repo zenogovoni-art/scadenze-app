@@ -53,6 +53,7 @@
   .voce .destra { text-align: right; white-space: nowrap; }
   .voce .importo { font-weight: 700; font-size: 1.05rem; }
   .voce .ricorrenza { color: var(--muted); font-size: .78rem; }
+  .voce .esente { color: var(--muted); font-size: .72rem; margin-top: 2px; }
   .voce .azioni { display: flex; flex-direction: column; gap: 6px; }
 
   .badge { display: inline-block; padding: 3px 9px; border-radius: 999px; font-size: .74rem;
@@ -344,6 +345,7 @@ function voceHTML(valuta) {
         <div class="destra">
           <div class="importo">${fmt(Number(v.importo), valuta)}</div>
           <div class="ricorrenza">${v.ricorrenza}</div>
+          ${v.tipo !== "mutuo" ? `<div class="esente">Importo esente IVA</div>` : ""}
         </div>
         <div class="azioni">
           <button class="small ghost" data-edit="${v._i}">✏️</button>
