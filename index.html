@@ -63,12 +63,21 @@
   .chart { display: flex; align-items: flex-end; gap: 6px; height: 220px; padding: 4px 0 0; border-bottom: 1px solid rgba(255,255,255,.12); }
   .chart .col { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: flex-end; height: 100%; gap: 4px; }
   .chart .val { font-size: .62rem; color: var(--muted); white-space: nowrap; }
-  .chart .bar { width: 100%; min-height: 2px; background: var(--accent); border-radius: 4px 4px 0 0; transition: .2s; }
-  .chart .col.vuoto .bar { background: rgba(255,255,255,.10); }
-  .chart .col.oggi .bar { background: var(--ok); }
-  .chart .mese { display: flex; justify-content: space-between; gap: 6px; margin-top: 6px; }
+  .chart .bar { width: 100%; min-height: 2px; display: flex; flex-direction: column-reverse;
+    background: rgba(255,255,255,.10); border-radius: 4px 4px 0 0; overflow: hidden; transition: .2s; }
+  .chart .seg { width: 100%; }
+  .chart .seg.abb { background: var(--accent); }
+  .chart .seg.mut { background: var(--warn); }
   .chart-x { display: flex; gap: 6px; margin-top: 6px; }
   .chart-x span { flex: 1; text-align: center; font-size: .62rem; color: var(--muted); text-transform: uppercase; }
+  .chart-x span.ora { color: var(--accent); font-weight: 700; }
+  .legenda { display: flex; gap: 18px; margin-top: 12px; font-size: .8rem; color: var(--muted); }
+  .legenda .box { display: inline-block; width: 12px; height: 12px; border-radius: 3px; margin-right: 6px; vertical-align: -1px; }
+  .legenda .box.abb { background: var(--accent); }
+  .legenda .box.mut { background: var(--warn); }
+  .grafico-riepilogo .punto { display: inline-block; width: 9px; height: 9px; border-radius: 50%; margin-right: 5px; }
+  .grafico-riepilogo .punto.abb { background: var(--accent); }
+  .grafico-riepilogo .punto.mut { background: var(--warn); }
   .grafico-riepilogo { margin-top: 14px; color: var(--muted); font-size: .85rem; line-height: 1.5; }
   .grafico-riepilogo b { color: var(--text); }
   .voce .azioni { display: flex; flex-direction: column; gap: 6px; }
@@ -174,6 +183,10 @@
       </div>
     </div>
     <div id="g-chart"></div>
+    <div class="legenda">
+      <span><i class="box abb"></i>Abbonamenti</span>
+      <span><i class="box mut"></i>Mutui</span>
+    </div>
     <div id="g-riepilogo" class="grafico-riepilogo"></div>
     <div class="azioni-modale">
       <button class="ghost" data-chiudi="ov-grafico">Chiudi</button>
@@ -417,15 +430,16 @@ function aggiornaNotaIva() {
 const ABBR_MESI = ["Gen","Feb","Mar","Apr","Mag","Giu","Lug","Ago","Set","Ott","Nov","Dic"];
 let gAnno = oggiData().getFullYear();
 function pagamentiPerMese(anno) {
-  const mesi = new Array(12).fill(0);
+  const mesi = Array.from({ length: 12 }, () => ({ abb: 0, mut: 0, tot: 0 }));
   (dati.voci || []).forEach(v => {
     const intervallo = RICORRENZE[v.ricorrenza] || 1;
     const importo = Number(v.importo) || 0;
     const scadenza = v.scadenza ? parseData(v.scadenza) : null;
+    const campo = v.tipo === "mutuo" ? "mut" : "abb";
     let d = parseData(v.prima_data);
     while (d.getFullYear() < anno) d = aggiungiMesi(d, intervallo);
     while (d.getFullYear() === anno) {
-      if (!scadenza || d <= scadenza) mesi[d.getMonth()] += importo;
+      if (!scadenza || d <= scadenza) { const m = mesi[d.getMonth()]; m[campo] += importo; m.tot += importo; }
       d = aggiungiMesi(d, intervallo);
     }
   });
@@ -442,26 +456,33 @@ function apriGrafico() {
 function renderGrafico() {
   const valuta = dati.valuta || "EUR";
   const mesi = pagamentiPerMese(gAnno);
-  const max = Math.max(...mesi, 0);
+  const max = Math.max(...mesi.map(m => m.tot), 0);
   const oggi = oggiData();
   const meseCorrente = (gAnno === oggi.getFullYear()) ? oggi.getMonth() : -1;
   document.getElementById("g-anno").textContent = gAnno;
-  const bars = mesi.map((tot, i) => {
-    const h = max > 0 ? Math.round((tot / max) * 100) : 0;
-    const cls = tot === 0 ? "vuoto" : (i === meseCorrente ? "oggi" : "");
-    const val = tot > 0 ? "€" + Math.round(tot) : "";
-    return `<div class="col ${cls}" title="${ABBR_MESI[i]} ${gAnno}: ${fmt(tot, valuta)}"><div class="val">${val}</div><div class="bar" style="height:${h}%"></div></div>`;
+  const bars = mesi.map((m, i) => {
+    const h = max > 0 ? Math.round((m.tot / max) * 100) : 0;
+    const cls = m.tot === 0 ? "vuoto" : (i === meseCorrente ? "oggi" : "");
+    const val = m.tot > 0 ? "€" + Math.round(m.tot) : "";
+    const hAbb = m.tot > 0 ? (m.abb / m.tot) * 100 : 0;
+    const hMut = m.tot > 0 ? (m.mut / m.tot) * 100 : 0;
+    const titolo = `${ABBR_MESI[i]} ${gAnno} — Abbonamenti ${fmt(m.abb, valuta)} · Mutui ${fmt(m.mut, valuta)} · Totale ${fmt(m.tot, valuta)}`;
+    return `<div class="col ${cls}" title="${titolo}"><div class="val">${val}</div>` +
+      `<div class="bar" style="height:${h}%"><div class="seg abb" style="height:${hAbb}%"></div><div class="seg mut" style="height:${hMut}%"></div></div></div>`;
   }).join("");
-  const labels = ABBR_MESI.map(m => `<span>${m}</span>`).join("");
+  const labels = ABBR_MESI.map((m, i) => `<span class="${i === meseCorrente ? "ora" : ""}">${m}</span>`).join("");
   document.getElementById("g-chart").innerHTML = `<div class="chart">${bars}</div><div class="chart-x">${labels}</div>`;
-  const totAnno = mesi.reduce((a, b) => a + b, 0);
+  const totAbb = mesi.reduce((a, m) => a + m.abb, 0);
+  const totMut = mesi.reduce((a, m) => a + m.mut, 0);
+  const totAnno = totAbb + totMut;
   const rie = document.getElementById("g-riepilogo");
   if (totAnno === 0) {
     rie.innerHTML = "Nessun pagamento previsto in questo anno.";
   } else {
-    const picco = mesi.indexOf(max);
+    const picco = mesi.reduce((best, m, i) => m.tot > mesi[best].tot ? i : best, 0);
     rie.innerHTML = `Totale anno: <b>${fmt(totAnno, valuta)}</b> · Media: <b>${fmt(totAnno / 12, valuta)}</b>/mese<br>` +
-      `Mese di picco: <b>${MESI[picco + 1]}</b> (${fmt(max, valuta)})`;
+      `<span class="punto abb"></span>Abbonamenti: <b>${fmt(totAbb, valuta)}</b> · <span class="punto mut"></span>Mutui: <b>${fmt(totMut, valuta)}</b><br>` +
+      `Mese di picco: <b>${MESI[picco + 1]}</b> (${fmt(mesi[picco].tot, valuta)})`;
   }
 }
 
