@@ -54,6 +54,7 @@
   .voce .importo { font-weight: 700; font-size: 1.05rem; }
   .voce .ricorrenza { color: var(--muted); font-size: .78rem; }
   .voce .esente { color: var(--muted); font-size: .72rem; margin-top: 2px; }
+  .campo .hint { color: var(--muted); font-size: .72rem; margin-top: 4px; }
   .voce .azioni { display: flex; flex-direction: column; gap: 6px; }
 
   .badge { display: inline-block; padding: 3px 9px; border-radius: 999px; font-size: .74rem;
@@ -120,7 +121,7 @@
       <div class="campo"><label>Tipo</label>
         <select id="f-tipo"><option value="abbonamento">Abbonamento</option><option value="mutuo">Mutuo</option></select>
       </div>
-      <div class="campo"><label>Importo (per addebito)</label><input id="f-importo" type="number" step="0.01" placeholder="17.99"></div>
+      <div class="campo"><label>Importo (per addebito)</label><input id="f-importo" type="number" step="0.01" placeholder="17.99"><small class="hint" id="f-nota-iva">Importo esente IVA</small></div>
     </div>
     <div class="due">
       <div class="campo"><label>Ricorrenza</label>
@@ -368,9 +369,13 @@ function apriVoce(i) {
   f("importo").value = v.importo ?? ""; f("ricorrenza").value = v.ricorrenza || "mensile";
   f("avviso").value = v.avviso_giorni ?? 3; f("prima").value = v.prima_data || "";
   f("scadenza").value = v.scadenza || ""; f("note").value = v.note || "";
+  aggiornaNotaIva();
   apri("ov-voce");
 }
 function f(id) { return document.getElementById("f-" + id); }
+function aggiornaNotaIva() {
+  document.getElementById("f-nota-iva").style.display = (f("tipo").value === "mutuo") ? "none" : "block";
+}
 
 async function salvaVoce() {
   const voce = {
@@ -420,6 +425,7 @@ function salvaCfgUI() {
 document.getElementById("btn-nuova").onclick = () => apriVoce(null);
 document.getElementById("btn-impostazioni").onclick = apriCfg;
 document.getElementById("btn-salva-voce").onclick = salvaVoce;
+document.getElementById("f-tipo").onchange = aggiornaNotaIva;
 document.getElementById("btn-salva-cfg").onclick = salvaCfgUI;
 document.querySelectorAll("[data-chiudi]").forEach(b => b.onclick = () => chiudi(b.dataset.chiudi));
 document.querySelectorAll(".overlay").forEach(o => o.onclick = e => { if (e.target === o) chiudi(o.id); });
